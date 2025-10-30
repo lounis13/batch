@@ -129,15 +129,31 @@ function convertToFlowElements(job: JobDetailFlat): { nodes: Node[]; edges: Edge
 
   // Create edges from dependencies
   // Allow edges between any nodes (flows and tasks)
+  const createdNodes = new Set(nodes.map(n => n.id));
+
   job.dependencies.forEach((dep: TaskDependency, index) => {
-    edges.push({
-      id: `e-${dep.source}-${dep.target}-${index}`,
-      source: dep.source,
-      target: dep.target,
-      animated: dep.source_output !== null,
-      style: { strokeWidth: 2 },
-    });
+    // Only create edge if both nodes exist
+    if (createdNodes.has(dep.source) && createdNodes.has(dep.target)) {
+      edges.push({
+        id: `e-${dep.source}-${dep.target}-${index}`,
+        source: dep.source,
+        target: dep.target,
+        animated: dep.source_output !== null,
+        style: { strokeWidth: 2 },
+      });
+    } else {
+      console.warn('Skipping edge - node not found:', {
+        source: dep.source,
+        target: dep.target,
+        sourceExists: createdNodes.has(dep.source),
+        targetExists: createdNodes.has(dep.target),
+      });
+    }
   });
+
+  console.log('Total nodes:', nodes.length);
+  console.log('Total edges:', edges.length);
+  console.log('Flow nodes:', nodes.filter(n => n.type === 'flow').map(n => n.id));
 
   return { nodes, edges };
 }
