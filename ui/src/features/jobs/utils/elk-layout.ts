@@ -125,6 +125,8 @@ export async function getLayoutedElements(
   // Convert edges to ELK format
   // Only include edges where BOTH nodes exist in the ELK graph
   const elkEdges = new Map<string, any>();
+  const skippedEdges: any[] = [];
+
   edges.forEach((edge) => {
     const sourceInElk = elkNodeIds.has(edge.source);
     const targetInElk = elkNodeIds.has(edge.target);
@@ -143,9 +145,22 @@ export async function getLayoutedElements(
             targets: [edge.target],
           });
         }
+      } else {
+        skippedEdges.push({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceParent,
+          targetParent,
+        });
       }
     }
   });
+
+  if (skippedEdges.length > 0) {
+    console.warn('ELK: Skipped edges (different parents):', skippedEdges);
+  }
+  console.log('ELK: Total edges for layout:', elkEdges.size, '/', edges.length);
 
   graph.edges = Array.from(elkEdges.values());
 

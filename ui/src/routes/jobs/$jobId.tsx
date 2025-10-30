@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useJobFlat } from '@/features/jobs/api';
-import { FlowVisualization } from '@/features/jobs/components/FlowVisualization';
+import { FlowVisualizationV2 } from '@/features/jobs/components/FlowVisualization-v2';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -131,7 +131,7 @@ function JobDetailPage() {
       )}
 
       {/* Flow Visualization */}
-      <FlowVisualization job={job} />
+      <FlowVisualizationV2 job={job} />
     </div>
   );
 }

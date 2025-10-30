@@ -110,6 +110,7 @@ class WorkflowRun:
         tasks: Map of task_id to TaskInstance
         parent_run_id: ID of parent workflow (if this is a subflow)
         parent_task_id: ID of parent task (if this is a subflow)
+        task_dependencies: Map of task_id to list of task_ids it depends on
     """
     id: str
     flow_name: str
@@ -120,6 +121,7 @@ class WorkflowRun:
     tasks: Dict[str, TaskInstance] = field(default_factory=dict)
     parent_run_id: Optional[str] = None
     parent_task_id: Optional[str] = None
+    task_dependencies: Dict[str, List[str]] = field(default_factory=dict)
 
     def get_all_tasks_recursive(self, store: Store) -> Dict[str, TaskInstance]:
         """

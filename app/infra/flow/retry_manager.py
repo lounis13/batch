@@ -8,16 +8,20 @@ and subflows, including downstream task reset capabilities.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from app.infra.flow.models import (
     ExecutionState,
     Store,
     SubFlowDefinition,
     TaskDefinition,
+    TaskInstance,
     TaskType,
     WorkflowRun,
 )
+
+if TYPE_CHECKING:
+    from app.infra.flow.event_manager import DependencyResolver
 
 # Configure logger for retry manager
 logger = logging.getLogger(__name__)
@@ -36,7 +40,7 @@ class RetryManager:
         store: Store,
         task_definitions: dict[str, TaskDefinition],
         subflow_definitions: dict[str, SubFlowDefinition],
-        downstream_resolver: Optional[object] = None,
+        downstream_resolver: Optional[DependencyResolver] = None,
     ):
         """
         Initialize the retry manager.
@@ -51,6 +55,18 @@ class RetryManager:
         self.task_definitions = task_definitions
         self.subflow_definitions = subflow_definitions
         self.downstream_resolver = downstream_resolver
+
+    def _reset_task_instance_state(self, task_instance: TaskInstance) -> None:
+        """
+        Reset a task instance to its initial state for retry.
+
+        Args:
+            task_instance: The task instance to reset
+        """
+        task_instance.state = ExecutionState.SCHEDULED
+        task_instance.end_date = None
+        task_instance.error = None
+        task_instance.try_number = 0
 
     def reset_task_state(self, workflow_run: WorkflowRun, task_id: str) -> None:
         """
@@ -67,16 +83,13 @@ class RetryManager:
             raise KeyError(f"Task '{task_id}' not found in workflow run")
 
         task_instance = workflow_run.tasks[task_id]
-        task_instance.state = ExecutionState.SCHEDULED
-        task_instance.end_date = None
-        task_instance.error = None
-        task_instance.try_number = 0
+        self._reset_task_instance_state(task_instance)
 
         # If it's a subflow, reset the child run as well
         if task_instance.type == TaskType.FLOW:
             self._reset_subflow_tasks(task_instance)
 
-    def _reset_subflow_tasks(self, subflow_task_instance: object) -> None:
+    def _reset_subflow_tasks(self, subflow_task_instance: TaskInstance) -> None:
         """
         Reset all tasks within a subflow for retry.
 
@@ -102,10 +115,7 @@ class RetryManager:
             # Reset all child tasks
             for child_task_instance in child_run.tasks.values():
                 if ExecutionState.is_terminal(child_task_instance.state):
-                    child_task_instance.state = ExecutionState.SCHEDULED
-                    child_task_instance.end_date = None
-                    child_task_instance.try_number = 0
-                    child_task_instance.error = None
+                    self._reset_task_instance_state(child_task_instance)
 
             child_run.state = ExecutionState.SCHEDULED
             child_run.end_date = None
@@ -138,10 +148,7 @@ class RetryManager:
             if task_id in workflow_run.tasks:
                 task_instance = workflow_run.tasks[task_id]
                 if ExecutionState.is_terminal(task_instance.state):
-                    task_instance.state = ExecutionState.SCHEDULED
-                    task_instance.end_date = None
-                    task_instance.error = None
-                    task_instance.try_number = 0
+                    self._reset_task_instance_state(task_instance)
 
                     # If it's a subflow, reset its tasks too
                     if task_instance.type == TaskType.FLOW:
@@ -271,8 +278,7 @@ class RetryManager:
         # Optionally reset downstream tasks in the target subflow
         # We reset downstream tasks in the CHILD flow (not the parent)
         if reset_downstream:
-            # Reset all downstream tasks of the target task in the child flow
-            # We need to iterate through all tasks and reset those that depend on the target
+            # Simply use the stored dependencies! Much simpler.
             self._reset_downstream_in_subflow(current_run, target_task_id)
 
         # Save the deepest subflow
@@ -295,9 +301,37 @@ class RetryManager:
 
             # Also reset downstream tasks in parent flows if reset_downstream is True
             if reset_downstream:
+                # Simply use the stored dependencies! Much simpler.
                 self._reset_downstream_in_subflow(parent_run, subflow_task_id)
 
             self.store.save(parent_run)
+
+    def _find_downstream_with_deps(
+        self, target_task_id: str, dependencies: dict
+    ) -> set[str]:
+        """
+        Find all tasks that depend on the target task using a given dependency map.
+
+        Args:
+            target_task_id: The task to find downstream tasks for
+            dependencies: Map of task_id -> list of dependencies
+
+        Returns:
+            Set of task IDs that are downstream of the target task
+        """
+        downstream = set()
+        to_visit = [target_task_id]
+
+        while to_visit:
+            current = to_visit.pop(0)
+
+            # Find tasks that depend on current
+            for task_id, deps in dependencies.items():
+                if current in deps and task_id not in downstream:
+                    downstream.add(task_id)
+                    to_visit.append(task_id)
+
+        return downstream
 
     def _reset_downstream_in_subflow(
         self, workflow_run: WorkflowRun, target_task_id: str
@@ -312,60 +346,22 @@ class RetryManager:
             workflow_run: The workflow run containing the tasks
             target_task_id: The task whose downstream tasks should be reset
         """
-        # Find all downstream tasks by traversing dependencies
-        downstream_tasks = self._find_downstream_tasks(workflow_run, target_task_id)
+        # Use stored dependencies from workflow_run (much simpler!)
+        downstream_tasks = self._find_downstream_with_deps(
+            target_task_id,
+            workflow_run.task_dependencies
+        )
 
         # Reset only the downstream tasks
         for task_id in downstream_tasks:
-            task_instance = workflow_run.tasks[task_id]
-            if ExecutionState.is_terminal(task_instance.state):
-                task_instance.state = ExecutionState.SCHEDULED
-                task_instance.end_date = None
-                task_instance.error = None
-                task_instance.try_number = 0
+            if task_id in workflow_run.tasks:
+                task_instance = workflow_run.tasks[task_id]
+                if ExecutionState.is_terminal(task_instance.state):
+                    self._reset_task_instance_state(task_instance)
 
-                # If it's a subflow, reset its tasks too
-                if task_instance.type == TaskType.FLOW:
-                    self._reset_subflow_tasks(task_instance)
-
-    def _find_downstream_tasks(
-        self, workflow_run: WorkflowRun, target_task_id: str
-    ) -> set[str]:
-        """
-        Find all tasks that depend on the target task (directly or indirectly).
-
-        Args:
-            workflow_run: The workflow run containing the tasks
-            target_task_id: The task to find downstream tasks for
-
-        Returns:
-            Set of task IDs that are downstream of the target task
-        """
-        # Build dependency graph from task/subflow definitions
-        dependencies = {}
-
-        # Add task dependencies
-        for task_id, task_def in self.task_definitions.items():
-            dependencies[task_id] = task_def.dependencies
-
-        # Add subflow dependencies
-        for subflow_id, subflow_def in self.subflow_definitions.items():
-            dependencies[subflow_id] = subflow_def.dependencies
-
-        # Find all downstream tasks using BFS
-        downstream = set()
-        to_visit = [target_task_id]
-
-        while to_visit:
-            current = to_visit.pop(0)
-
-            # Find tasks that depend on current
-            for task_id, deps in dependencies.items():
-                if current in deps and task_id not in downstream:
-                    downstream.add(task_id)
-                    to_visit.append(task_id)
-
-        return downstream
+                    # If it's a subflow, reset its tasks too
+                    if task_instance.type == TaskType.FLOW:
+                        self._reset_subflow_tasks(task_instance)
 
     def can_retry_automatically(
         self, workflow_run: WorkflowRun, task_id: str

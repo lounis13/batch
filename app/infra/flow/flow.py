@@ -385,6 +385,8 @@ class AsyncFlow:
                     task_id=task_id,
                     type=self._task_definitions[task_id].task_type,
                 )
+                # Store dependencies for this task
+                workflow_run.task_dependencies[task_id] = self._task_definitions[task_id].dependencies
 
             # Create task instances for subflows
             for subflow_id in self._subflow_definitions:
@@ -393,6 +395,8 @@ class AsyncFlow:
                     type=TaskType.FLOW,
                     input_json=self._subflow_definitions[subflow_id].params or {},
                 )
+                # Store dependencies for this subflow
+                workflow_run.task_dependencies[subflow_id] = self._subflow_definitions[subflow_id].dependencies
 
         self._store.save(workflow_run)
 

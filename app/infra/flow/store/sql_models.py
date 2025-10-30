@@ -36,6 +36,7 @@ class WorkflowRunModel(SQLModel, table=True):
     end_date: Optional[datetime] = Field(default=None)
     parent_run_id: Optional[str] = Field(default=None, index=True)
     parent_task_id: Optional[str] = Field(default=None)
+    task_dependencies_json: str = Field(default="{}")
 
 
 class TaskInstanceModel(SQLModel, table=True):
@@ -148,6 +149,7 @@ def workflow_run_to_model(run: WorkflowRun) -> WorkflowRunModel:
         end_date=run.end_date,
         parent_run_id=run.parent_run_id,
         parent_task_id=run.parent_task_id,
+        task_dependencies_json=json.dumps(run.task_dependencies or {}),
     )
 
 
@@ -175,6 +177,7 @@ def model_to_workflow_run(
         tasks=tasks or {},
         parent_run_id=model.parent_run_id,
         parent_task_id=model.parent_task_id,
+        task_dependencies=json.loads(model.task_dependencies_json or "{}"),
     )
 
 
