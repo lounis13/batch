@@ -37,7 +37,7 @@ ui/src/
 
 Créer un fichier `.env` :
 ```bash
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8080
 ```
 
 ### 2. Utilisation dans un composant

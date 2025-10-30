@@ -1,152 +1,156 @@
-import {useJobs, useTriggerJob} from '../api';
+import { useMemo } from 'react';
+import { useJobs, useTriggerJob } from '../api';
+import { DataTable } from '@/components/data-table';
+import { jobsColumns } from './jobs-columns';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Plus, RefreshCw } from 'lucide-react';
 
 /**
- * Example: Jobs List Component
- * Demonstrates declarative API usage with React Query
+ * Jobs List Component with DataTable
+ * Uses shadcn components and react-table
  */
 export function JobsList() {
-    // Query: Get all jobs with automatic refetching and caching
-    const {data, isLoading, error, refetch} = useJobs(undefined, {
-        refetchInterval: 5000, // Auto-refresh every 5 seconds
-        staleTime: 3000,
-    });
+  // Query: Get all jobs with automatic refetching and caching
+  const { data, isLoading, error, refetch } = useJobs(undefined, {
+    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    staleTime: 3000,
+  });
 
-    // Mutation: Trigger a new job
-    const triggerJob = useTriggerJob({
-        onSuccess: (jobId) => {
-            console.log('Job triggered successfully:', jobId);
-        },
-        onError: (error) => {
-            console.error('Failed to trigger job:', error.detail);
-        },
-    });
+  // Mutation: Trigger a new job
+  const triggerJob = useTriggerJob({
+    onSuccess: (jobId) => {
+      console.log('Job triggered successfully:', jobId);
+    },
+    onError: (error) => {
+      console.error('Failed to trigger job:', error.detail);
+    },
+  });
 
-    if (isLoading) {
-        return <div>Loading jobs...</div>;
-    }
+  // Filter: Only show parent jobs (jobs without parent_run_id)
+  const parentJobs = useMemo(() => {
+    if (!data?.jobs) return [];
+    return data.jobs.filter((job) => !job.parent_run_id);
+  }, [data?.jobs]);
 
-    if (error) {
-        return <div>Error: {error.detail}</div>;
-    }
-
-    if (!data) {
-        return null;
-    }
-
+  if (isLoading) {
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Jobs</h2>
-                <button
-                    onClick={() => triggerJob.mutate()}
-                    disabled={triggerJob.isPending}
-                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-                >
-                    {triggerJob.isPending ? 'Triggering...' : 'Trigger New Job'}
-                </button>
-            </div>
+      <div className="space-y-4">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
 
-            {/* Aggregated Stats */}
-            <div className="grid grid-cols-6 gap-4">
-                <StatCard
-                    label="Total"
-                    value={data.aggregated_stats.total}
-                    color="gray"
-                />
-                <StatCard
-                    label="Scheduled"
-                    value={data.aggregated_stats.scheduled}
-                    color="blue"
-                />
-                <StatCard
-                    label="Running"
-                    value={data.aggregated_stats.running}
-                    color="yellow"
-                />
-                <StatCard
-                    label="Completed"
-                    value={data.aggregated_stats.completed}
-                    color="green"
-                />
-                <StatCard
-                    label="Failed"
-                    value={data.aggregated_stats.failed}
-                    color="red"
-                />
-                <StatCard
-                    label="Skipped"
-                    value={data.aggregated_stats.skipped}
-                    color="gray"
-                />
-            </div>
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Error: {error.detail}</AlertDescription>
+      </Alert>
+    );
+  }
 
-            {/* Jobs List */}
-            <div className="space-y-2">
-                {data.jobs.map((job) => (
-                    <div
-                        key={job.job_id}
-                        className="border rounded p-4 hover:bg-gray-50"
-                    >
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <h3 className="font-semibold">{job.job_id}</h3>
-                                <p className="text-sm text-gray-600">
-                                    Status: <StatusBadge status={job.status}/>
-                                </p>
-                                {job.duration && (
-                                    <p className="text-xs text-gray-500">
-                                        Duration: {job.duration.toFixed(2)}s
-                                    </p>
-                                )}
-                            </div>
-                            <div className="grid grid-cols-5 gap-2 text-xs">
-                                <div>Total: {job.stats.total}</div>
-                                <div>Running: {job.stats.running}</div>
-                                <div>Completed: {job.stats.completed}</div>
-                                <div>Failed: {job.stats.failed}</div>
-                                <div>Skipped: {job.stats.skipped}</div>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+  if (!data) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Jobs</h2>
+          <p className="text-muted-foreground">
+            Manage and monitor your workflow executions
+          </p>
         </div>
-    );
-}
-
-function StatCard({
-                      label,
-                      value,
-                      color,
-                  }: {
-    label: string;
-    value: number;
-    color: string;
-}) {
-    return (
-        <div className={`border rounded p-3 bg-${color}-50`}>
-            <div className="text-xs text-gray-600">{label}</div>
-            <div className="text-2xl font-bold">{value}</div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button
+            onClick={() => triggerJob.mutate()}
+            disabled={triggerJob.isPending}
+            size="sm"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {triggerJob.isPending ? 'Triggering...' : 'Trigger Job'}
+          </Button>
         </div>
-    );
-}
+      </div>
 
-function StatusBadge({status}: { status: string }) {
-    const colors: Record<string, string> = {
-        scheduled: 'bg-blue-100 text-blue-800',
-        running: 'bg-yellow-100 text-yellow-800',
-        completed: 'bg-green-100 text-green-800',
-        failed: 'bg-red-100 text-red-800',
-        skipped: 'bg-gray-100 text-gray-800',
-    };
+      {/* Aggregated Stats */}
+      {data.stats && (
+        <div className="grid gap-4 md:grid-cols-5">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Total Jobs</CardDescription>
+              <CardTitle className="text-3xl">{data.stats.total_jobs}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Running</CardDescription>
+              <CardTitle className="text-3xl text-yellow-600">
+                {data.stats.running_jobs}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Successful</CardDescription>
+              <CardTitle className="text-3xl text-green-600">
+                {data.stats.successful_jobs}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Failed</CardDescription>
+              <CardTitle className="text-3xl text-red-600">
+                {data.stats.failed_jobs}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Pending</CardDescription>
+              <CardTitle className="text-3xl text-blue-600">
+                {data.stats.pending_jobs}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
 
-    return (
-        <span
-            className={`px-2 py-1 rounded text-xs font-semibold ${
-                colors[status] || 'bg-gray-100 text-gray-800'
-            }`}
-        >
-      {status}
-    </span>
-    );
+      {/* Jobs Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Jobs</CardTitle>
+          <CardDescription>
+            Showing {parentJobs.length} parent job(s)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={jobsColumns}
+            data={parentJobs}
+            searchable={{
+              column: 'flow_name',
+              placeholder: 'Search by flow name...',
+            }}
+            pagination={true}
+            pageSize={10}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
