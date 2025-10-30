@@ -49,12 +49,13 @@ class RetryManager:
             store: Storage backend for persisting workflow state
             task_definitions: Map of task IDs to task definitions
             subflow_definitions: Map of subflow IDs to subflow definitions
-            downstream_resolver: Optional resolver for finding downstream tasks
+            downstream_resolver: (Deprecated) No longer used. Dependencies are now stored
+                in WorkflowRun.task_dependencies. Kept for backward compatibility.
         """
         self.store = store
         self.task_definitions = task_definitions
         self.subflow_definitions = subflow_definitions
-        self.downstream_resolver = downstream_resolver
+        self.downstream_resolver = downstream_resolver  # Deprecated, kept for compatibility
 
     def _reset_task_instance_state(self, task_instance: TaskInstance) -> None:
         """
@@ -137,11 +138,10 @@ class RetryManager:
             workflow_run: The workflow run containing the tasks
             root_task_id: ID of the root task whose downstream tasks should be reset
         """
-        if not self.downstream_resolver:
-            return
-
-        downstream_task_ids = self.downstream_resolver.get_all_downstream_tasks(
-            root_task_id
+        # Use stored dependencies from workflow_run (simpler and more consistent)
+        downstream_task_ids = self._find_downstream_with_deps(
+            root_task_id,
+            workflow_run.task_dependencies
         )
 
         for task_id in downstream_task_ids:
@@ -197,7 +197,7 @@ class RetryManager:
                 workflow_run.end_date = None
 
             # Optionally reset downstream tasks
-            if reset_downstream and self.downstream_resolver:
+            if reset_downstream:
                 self.reset_downstream_tasks(workflow_run, task_id)
 
             self.store.save(workflow_run)
