@@ -38,8 +38,8 @@ export const FlatTaskSchema = z.object({
   attempt_number: z.number(),
   name: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  input_data: z.any().optional().nullable(),
-  output_data: z.any().optional().nullable(),
+  input_data: z.record(z.any()).optional().nullable(),
+  output_data: z.record(z.any()).optional().nullable(),
   error_message: z.string().optional().nullable(),
   start_timestamp: z.string().optional().nullable(),
   end_timestamp: z.string().optional().nullable(),
@@ -61,26 +61,13 @@ export const TaskDependencySchema = z.object({
 export type TaskDependency = z.infer<typeof TaskDependencySchema>;
 
 /**
- * Flow Node Schema (hierarchical) - Recursive type
+ * Flow Node Schema (hierarchical)
  */
-export type FlowNode = {
-  id: string;
-  name: string;
-  status: string;
-  error?: string | null;
-  start_time?: string | null;
-  end_time?: string | null;
-  duration?: number | null;
-  result?: any | null;
-  children?: FlowNode[];
-  dependencies?: string[];
-};
-
-export const FlowNodeSchema: z.ZodType<FlowNode> = z.lazy(() =>
+export const FlowNodeSchema: z.ZodSchema<any> = z.lazy(() =>
   z.object({
     id: z.string(),
     name: z.string(),
-    status: z.string(),
+    status: TaskStatusSchema,
     error: z.string().optional().nullable(),
     start_time: z.string().optional().nullable(),
     end_time: z.string().optional().nullable(),
@@ -90,6 +77,7 @@ export const FlowNodeSchema: z.ZodType<FlowNode> = z.lazy(() =>
     dependencies: z.array(z.string()).optional(),
   })
 );
+export type FlowNode = z.infer<typeof FlowNodeSchema>;
 
 /**
  * Job Statistics Schema
@@ -152,22 +140,14 @@ export type AllJobsResponse = z.infer<typeof AllJobsResponseSchema>;
  * Job Detail (Flat) Schema
  */
 export const JobDetailFlatSchema = z.object({
-  run_id: z.string(),
-  flow_name: z.string(),
-  params: z.any(),
-  state: z.string(),
-  start_timestamp: z.string().optional().nullable(),
-  end_timestamp: z.string().optional().nullable(),
-  duration_ms: z.number().optional().nullable(),
-  parent_run_id: z.string().optional().nullable(),
-  parent_task_id: z.string().optional().nullable(),
-  tasks: z.array(FlatTaskSchema),
-  dependencies: z.array(TaskDependencySchema),
-  total_tasks: z.number(),
-  successful_tasks: z.number(),
-  failed_tasks: z.number(),
-  running_tasks: z.number(),
-  pending_tasks: z.number().optional().default(0),
+  job_id: z.string(),
+  status: TaskStatusSchema,
+  start_time: z.string().optional().nullable(),
+  end_time: z.string().optional().nullable(),
+  duration: z.number().optional().nullable(),
+  params: z.record(z.any()),
+  tasks: z.array(FlatExecutionTaskSchema),
+  stats: JobStatsSchema,
 });
 export type JobDetailFlat = z.infer<typeof JobDetailFlatSchema>;
 
@@ -180,7 +160,7 @@ export const JobDetailSchema = z.object({
   start_time: z.string().optional().nullable(),
   end_time: z.string().optional().nullable(),
   duration: z.number().optional().nullable(),
-  params: z.any(),
+  params: z.record(z.any()),
   flow: FlowNodeSchema,
   stats: JobStatsSchema,
 });

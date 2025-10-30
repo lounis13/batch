@@ -1,8 +1,7 @@
 import { type ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, Eye } from 'lucide-react';
-import { useNavigate } from '@tanstack/react-router';
+import { ArrowUpDown } from 'lucide-react';
 import type { JobSummary } from '../api';
 
 /**
@@ -26,25 +25,9 @@ function StatusBadge({ status }: { status: string }) {
 
 /**
  * Jobs Table Columns Definition
- * Declarative column configuration with sorting and navigation
+ * Declarative column configuration with sorting
  */
 export const jobsColumns: ColumnDef<JobSummary>[] = [
-  {
-    id: 'actions',
-    header: 'Actions',
-    cell: ({ row }) => {
-      const navigate = useNavigate();
-      return (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate({ to: '/jobs/$jobId', params: { jobId: row.original.run_id } })}
-        >
-          <Eye className="h-4 w-4" />
-        </Button>
-      );
-    },
-  },
   {
     accessorKey: 'flow_name',
     header: ({ column }) => {
