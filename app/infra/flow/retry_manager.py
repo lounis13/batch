@@ -303,20 +303,22 @@ class RetryManager:
         self, workflow_run: WorkflowRun, target_task_id: str
     ) -> None:
         """
-        Reset downstream tasks in a subflow without using dependency resolver.
+        Reset downstream tasks in a subflow.
 
-        This is a simple implementation that resets all tasks that are in
-        terminal state (SUCCESS, FAILED, SKIPPED) after the target task.
-        It assumes tasks are ordered or we want to reset all terminal tasks.
+        This method identifies tasks that depend on the target task (directly or
+        indirectly) and resets only those tasks.
 
         Args:
             workflow_run: The workflow run containing the tasks
             target_task_id: The task whose downstream tasks should be reset
         """
-        # Simple approach: reset all tasks that are in terminal state
-        # This is safe because they will only re-execute if their dependencies are met
-        for task_id, task_instance in workflow_run.tasks.items():
-            if task_id != target_task_id and ExecutionState.is_terminal(task_instance.state):
+        # Find all downstream tasks by traversing dependencies
+        downstream_tasks = self._find_downstream_tasks(workflow_run, target_task_id)
+
+        # Reset only the downstream tasks
+        for task_id in downstream_tasks:
+            task_instance = workflow_run.tasks[task_id]
+            if ExecutionState.is_terminal(task_instance.state):
                 task_instance.state = ExecutionState.SCHEDULED
                 task_instance.end_date = None
                 task_instance.error = None
@@ -325,6 +327,45 @@ class RetryManager:
                 # If it's a subflow, reset its tasks too
                 if task_instance.type == TaskType.FLOW:
                     self._reset_subflow_tasks(task_instance)
+
+    def _find_downstream_tasks(
+        self, workflow_run: WorkflowRun, target_task_id: str
+    ) -> set[str]:
+        """
+        Find all tasks that depend on the target task (directly or indirectly).
+
+        Args:
+            workflow_run: The workflow run containing the tasks
+            target_task_id: The task to find downstream tasks for
+
+        Returns:
+            Set of task IDs that are downstream of the target task
+        """
+        # Build dependency graph from task/subflow definitions
+        dependencies = {}
+
+        # Add task dependencies
+        for task_id, task_def in self.task_definitions.items():
+            dependencies[task_id] = task_def.dependencies
+
+        # Add subflow dependencies
+        for subflow_id, subflow_def in self.subflow_definitions.items():
+            dependencies[subflow_id] = subflow_def.dependencies
+
+        # Find all downstream tasks using BFS
+        downstream = set()
+        to_visit = [target_task_id]
+
+        while to_visit:
+            current = to_visit.pop(0)
+
+            # Find tasks that depend on current
+            for task_id, deps in dependencies.items():
+                if current in deps and task_id not in downstream:
+                    downstream.add(task_id)
+                    to_visit.append(task_id)
+
+        return downstream
 
     def can_retry_automatically(
         self, workflow_run: WorkflowRun, task_id: str
